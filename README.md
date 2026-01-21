@@ -228,6 +228,7 @@ TaskRunOutput uses HTTP-style status codes:
 | Language | Package | Documentation |
 |----------|---------|---------------|
 | TypeScript | `natq-ts` | [natq-ts/README.md](natq-ts/README.md) |
+| Python | `natq-py` | [natq-py/README.md](natq-py/README.md) |
 
 ## E2E Tests
 

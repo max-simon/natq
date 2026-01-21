@@ -229,6 +229,13 @@ yarn install
 yarn start
 ```
 
+**Python:**
+```bash
+cd e2e/workers/python
+poetry install
+poetry run python main.py
+```
+
 ### 3. Run the Tester
 
 ```bash
@@ -263,10 +270,13 @@ e2e/
 │   ├── main.go
 │   └── go.mod
 └── workers/
-    └── typescript/        # TypeScript worker implementation
-        ├── package.json
-        └── src/
-            └── main.ts
+    ├── typescript/        # TypeScript worker implementation
+    │   ├── package.json
+    │   └── src/
+    │       └── main.ts
+    └── python/            # Python worker implementation
+        ├── pyproject.toml
+        └── main.py
 ```
 
 ## Adding a New Language Worker

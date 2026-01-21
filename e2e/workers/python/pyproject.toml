@@ -1,0 +1,18 @@
+[tool.poetry]
+name = "natq-e2e-worker-python"
+version = "1.0.0"
+description = "E2E test worker for natq Python SDK"
+authors = []
+readme = "README.md"
+packages = [{include = "main.py"}]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+natq = { path = "../../../natq-py", develop = true }
+
+[tool.poetry.scripts]
+start = "main:main_sync"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
