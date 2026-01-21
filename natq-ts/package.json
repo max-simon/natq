@@ -1,0 +1,36 @@
+{
+  "name": "natq",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Language-agnostic distributed task queue framework based on NATS",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "test": "NODE_OPTIONS=--experimental-vm-modules jest",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "nats",
+    "task-queue",
+    "distributed",
+    "workers"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "nats": "^2.19.0",
+    "uuid": "^13.0.0"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.0",
+    "@types/node": "^20.10.0",
+    "@types/uuid": "^9.0.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.0",
+    "typescript": "^5.3.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
