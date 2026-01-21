@@ -5,8 +5,7 @@ const retryAttempts: Map<string, number> = new Map();
 
 // e2e-add: Add two numbers
 const addHandler: TaskHandler = async (input, context) => {
-  const a = (input as { a: number }).a;
-  const b = (input as { b: number }).b;
+  const { a, b } = input as { a: number; b: number };
 
   return {
     id: context.runId,

@@ -218,3 +218,27 @@ TaskRunOutput uses HTTP-style status codes:
 | Language | Package | Documentation |
 |----------|---------|---------------|
 | TypeScript | `natq-ts` | [natq-ts/README.md](natq-ts/README.md) |
+
+## E2E Tests
+
+End-to-end tests verify that SDK implementations correctly implement the natq protocol. The test suite uses a Go-based tester that acts as a producer, allowing any language worker to be tested.
+
+**Test coverage:**
+- Sync task execution (request/reply)
+- Async task lifecycle (KV status progression)
+- Error handling (4xx client errors, 5xx server errors)
+- Retry behavior with exponential backoff
+
+**Quick start:**
+```bash
+# Terminal 1: Start NATS with JetStream
+nats-server -js
+
+# Terminal 2: Start a worker (e.g., TypeScript)
+cd e2e/workers/typescript && yarn install && yarn start
+
+# Terminal 3: Run tests
+cd e2e/tester && go run .
+```
+
+See [e2e/README.md](e2e/README.md) for full documentation.

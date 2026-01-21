@@ -287,6 +287,35 @@ Test these with mocked NATS objects:
 5. Multiple workers consuming same queue (load distribution)
 6. Graceful shutdown with in-flight tasks
 
+### E2E Tests
+
+The `e2e/` directory contains end-to-end tests that verify SDK implementations. When implementing a new language SDK, you must pass all E2E tests.
+
+**E2E Test Tasks:**
+
+| Task ID | Type | Purpose |
+|---------|------|---------|
+| `e2e-add` | sync | Add two numbers, return `{ sum: a + b }` |
+| `e2e-echo` | sync | Echo input back (excluding `runId`) |
+| `e2e-client-error` | sync | Return status 400 with error message |
+| `e2e-delay` | async | Wait `delayMs` milliseconds, return `{ delayed: true }` |
+| `e2e-retry` | async | Fail with 500 for first N attempts, succeed after |
+| `e2e-async-client-error` | async | Return status 400 (should not retry) |
+
+**Running E2E tests:**
+```bash
+# Start NATS with JetStream
+nats-server -js
+
+# Start your worker implementation
+cd e2e/workers/<language> && <start command>
+
+# Run the Go tester
+cd e2e/tester && go run .
+```
+
+See `e2e/README.md` for detailed task specifications and expected behavior.
+
 ## Common Implementation Pitfalls
 
 1. **Forgetting heartbeats**: Long async tasks will timeout without `msg.working()`
@@ -338,5 +367,7 @@ Test these with mocked NATS objects:
 | `natq-ts/README.md` | TypeScript SDK documentation |
 | `natq-ts/src/worker.ts` | Reference implementation |
 | `natq-ts/src/logger.ts` | Logger interface |
-| `natq-ts/src/worker.test.ts` | Test examples |
-| `natq-ts/mod.md` | Planned modifications (when applicable) |
+| `natq-ts/src/worker.test.ts` | Unit test examples |
+| `e2e/README.md` | E2E test documentation and task specifications |
+| `e2e/tester/main.go` | Go-based E2E test runner (producer) |
+| `e2e/workers/typescript/` | TypeScript E2E worker reference implementation |

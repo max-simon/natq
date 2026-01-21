@@ -191,7 +191,8 @@ The test sequence covers core natq features. All workers must implement these ta
 ### 1. Start NATS Server
 
 ```bash
-nats-server
+# JetStream must be enabled for async tasks
+nats-server -js
 ```
 
 ### 2. Start a Worker
@@ -199,8 +200,8 @@ nats-server
 **TypeScript:**
 ```bash
 cd e2e/workers/typescript
-npm install
-npm start
+yarn install
+yarn start
 ```
 
 ### 3. Run the Tester
@@ -208,6 +209,23 @@ npm start
 ```bash
 cd e2e/tester
 go run .
+```
+
+### Expected Output
+
+```
+=== natq E2E Test Runner ===
+
+=== Test Results ===
+
+[PASS] Sync: Add Numbers (e2e-add)
+[PASS] Sync: Echo (e2e-echo)
+[PASS] Sync: Client Error (e2e-client-error)
+[PASS] Async: Delayed Response (e2e-delay)
+[PASS] Async: Server Error with Retry (e2e-retry)
+[PASS] Async: Client Error (e2e-async-client-error)
+
+Total: 6 passed, 0 failed
 ```
 
 ## Directory Structure
@@ -228,6 +246,57 @@ e2e/
 ## Adding a New Language Worker
 
 1. Create a new directory under `e2e/workers/<language>/`
-2. Implement all tasks from the test sequence above
+2. Implement all 6 tasks from the test sequence above
 3. Ensure task IDs and behavior match exactly
 4. Run the Go tester to verify compliance
+
+### Implementation Checklist
+
+Your E2E worker must:
+
+- [ ] Register all 6 tasks with exact task IDs (`e2e-add`, `e2e-echo`, etc.)
+- [ ] Use correct task types (3 sync, 3 async)
+- [ ] Connect to NATS at `localhost:4222`
+- [ ] Handle the `e2e-retry` task by tracking attempts per `runId` and failing the first N times
+
+### Task Handler Reference
+
+```
+e2e-add (sync):
+  Input:  { a: number, b: number }
+  Output: { sum: a + b }
+  Status: 200
+
+e2e-echo (sync):
+  Input:  { message: string, nested: object, ... }
+  Output: Same as input (excluding runId)
+  Status: 200
+
+e2e-client-error (sync):
+  Input:  { shouldFail: true }
+  Output: (none)
+  Status: 400
+  Error:  "Client requested failure"
+
+e2e-delay (async):
+  Input:  { runId: string, delayMs: number }
+  Output: { delayed: true }
+  Status: 200
+  Behavior: Wait delayMs before returning
+
+e2e-retry (async):
+  Input:  { runId: string, failCount: number }
+  Output: { attempts: number }
+  Status: 500 for first failCount attempts, then 200
+  Behavior: Track attempts per runId, fail until attempts > failCount
+
+e2e-async-client-error (async):
+  Input:  { runId: string }
+  Output: (none)
+  Status: 400
+  Error:  "Async client error"
+```
+
+### Reference Implementation
+
+See `e2e/workers/typescript/src/main.ts` for a complete reference implementation.
