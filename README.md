@@ -89,8 +89,18 @@ The message payload sent to trigger a task.
 interface TaskRunInput {
   [key: string]: any;                // Input data (conforms to inputSchema)
   runId?: string;                    // Optional: custom run ID for tracking
+  dropResultOnSuccess?: boolean;     // Optional: delete result from KV after success (async only)
 }
 ```
+
+### Fire-and-Forget Async Tasks
+
+For async tasks where results don't need to be persisted, set `dropResultOnSuccess: true` in the input payload. The worker will:
+1. Write the result to KV (allowing watchers to see the final status)
+2. Acknowledge the message
+3. Delete the result from KV immediately after
+
+This keeps the results bucket clean for high-volume fire-and-forget workloads. Clients watching for the result will still see the OK status before it's deleted.
 
 ## NATS Components
 

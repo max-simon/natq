@@ -175,6 +175,30 @@ The test sequence covers core natq features. All workers must implement these ta
 }
 ```
 
+### 7. Async: Drop Result on Success (`e2e-drop-result`)
+
+**Type:** `async`
+**Purpose:** Verify fire-and-forget mode with `dropResultOnSuccess: true`
+
+**Input:**
+```json
+{
+  "runId": "drop-test-001",
+  "dropResultOnSuccess": true
+}
+```
+
+**Verification Steps:**
+1. Publish job to `natq.job.e2e-drop-result`
+2. Poll KV `natq_results` for key `e2e-drop-result.drop-test-001`
+3. Verify status reaches `200` (Success)
+4. Verify the key is deleted from KV after success
+
+**Behavior:**
+- Worker writes result with status 200 to KV
+- Worker acknowledges the message
+- Worker immediately deletes the result from KV
+
 ## Task Summary
 
 | Task ID | Type | Purpose |
@@ -185,6 +209,7 @@ The test sequence covers core natq features. All workers must implement these ta
 | `e2e-delay` | async | Async lifecycle, KV status |
 | `e2e-retry` | async | Server error, retry behavior |
 | `e2e-async-client-error` | async | Async 4xx, no retry |
+| `e2e-drop-result` | async | Fire-and-forget, dropResultOnSuccess |
 
 ## Running Tests
 
@@ -224,8 +249,9 @@ go run .
 [PASS] Async: Delayed Response (e2e-delay)
 [PASS] Async: Server Error with Retry (e2e-retry)
 [PASS] Async: Client Error (e2e-async-client-error)
+[PASS] Async: Drop Result on Success (e2e-drop-result)
 
-Total: 6 passed, 0 failed
+Total: 7 passed, 0 failed
 ```
 
 ## Directory Structure
@@ -254,10 +280,11 @@ e2e/
 
 Your E2E worker must:
 
-- [ ] Register all 6 tasks with exact task IDs (`e2e-add`, `e2e-echo`, etc.)
-- [ ] Use correct task types (3 sync, 3 async)
+- [ ] Register all 7 tasks with exact task IDs (`e2e-add`, `e2e-echo`, etc.)
+- [ ] Use correct task types (3 sync, 4 async)
 - [ ] Connect to NATS at `localhost:4222`
 - [ ] Handle the `e2e-retry` task by tracking attempts per `runId` and failing the first N times
+- [ ] Support `dropResultOnSuccess` for fire-and-forget tasks
 
 ### Task Handler Reference
 
@@ -295,6 +322,12 @@ e2e-async-client-error (async):
   Output: (none)
   Status: 400
   Error:  "Async client error"
+
+e2e-drop-result (async):
+  Input:  { runId: string, dropResultOnSuccess: true }
+  Output: { dropped: true }
+  Status: 200
+  Behavior: Result is written to KV then immediately deleted
 ```
 
 ### Reference Implementation

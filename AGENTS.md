@@ -43,11 +43,13 @@ All messages use **JSON encoding**. Response metadata is in NATS headers.
 ```json
 {
   "runId": "optional-custom-id",
+  "dropResultOnSuccess": false,
   "...": "task-specific input fields"
 }
 ```
 
 - `runId`: Optional. If omitted, worker generates UUIDv7. Used for logging/tracing and KV key.
+- `dropResultOnSuccess`: Optional. If `true`, the result is deleted from KV immediately after successful acknowledgment (async tasks only). Useful for fire-and-forget workloads.
 - Other fields: Task-specific input conforming to `inputSchema`.
 
 ### Task Output (Worker → Producer / KV)
@@ -152,7 +154,7 @@ CREATED ──▶ registerTask() ──▶ CONFIGURED ──▶ start() ──�
    - `TaskType` enum: `SYNC`, `ASYNC`
    - `TaskDefinition`: id, type, subject, inputSchema?, outputSchema?
    - `TaskContext`: runId, task, workerId
-   - `TaskRunInput`: JSON object with optional runId
+   - `TaskRunInput`: JSON object with optional runId, dropResultOnSuccess
    - `TaskRunOutput`: id, taskId, status, data?, error?
    - `TaskHandler`: function(input, context) → output
    - `StatusCode` enum: PROCESSING=100, OK=200, BAD_REQUEST=400, INTERNAL_ERROR=500
@@ -210,12 +212,21 @@ deliver_policy: all
 5. Create KV entry: key = "<taskId>.<runId>", value = { id, taskId, status: 100 }
 6. Build TaskContext { runId, task, workerId }
 7. Execute handler
-   - On success: update KV with result, msg.ack()
+   - On success: update KV with result, msg.ack(), if dropResultOnSuccess delete KV entry
    - On client error (300-499): update KV with error, msg.term()
    - On server error (500+): msg.nak(delay), DO NOT update KV
    - On exception: msg.nak(5000), DO NOT update KV
 8. Clear heartbeat interval
 ```
+
+### Fire-and-Forget Mode (dropResultOnSuccess)
+
+When `input.dropResultOnSuccess` is `true` for async tasks:
+1. Result is written to KV (so watchers see the final status)
+2. Message is acknowledged
+3. Result is immediately deleted from KV
+
+This keeps the results bucket clean for high-volume fire-and-forget workloads.
 
 ### Error Handling Requirements
 
@@ -301,6 +312,7 @@ The `e2e/` directory contains end-to-end tests that verify SDK implementations. 
 | `e2e-delay` | async | Wait `delayMs` milliseconds, return `{ delayed: true }` |
 | `e2e-retry` | async | Fail with 500 for first N attempts, succeed after |
 | `e2e-async-client-error` | async | Return status 400 (should not retry) |
+| `e2e-drop-result` | async | Test `dropResultOnSuccess` (result deleted after success) |
 
 **Running E2E tests:**
 ```bash

@@ -151,9 +151,13 @@ export type JsonSerializable =
  *
  * Reserved fields:
  * - `runId`: Custom run ID for tracking. If omitted, a UUID is generated.
+ * - `dropResultOnSuccess`: For async tasks only. If true, the result is deleted
+ *   from KV immediately after acknowledgment. Useful for fire-and-forget tasks
+ *   where results don't need to be persisted.
  */
 export type TaskRunInput = JsonSerializable & {
   runId?: string;
+  dropResultOnSuccess?: boolean;
 };
 
 /**
@@ -830,6 +834,33 @@ export class NatqWorker {
   }
 
   /**
+   * Delete a task result from the results KV bucket.
+   * Used for fire-and-forget tasks with dropResultOnSuccess.
+   */
+  private async deleteResultFromKv(
+    task: RegisteredTask,
+    key: string
+  ): Promise<void> {
+    try {
+      await this.resultsKv?.delete(key);
+
+      this.logger.debug("Result deleted from KV", {
+        key,
+        workerId: this.workerId,
+        taskId: task.definition.id,
+      });
+    } catch (error) {
+      // Log but don't throw - KV failure shouldn't crash the worker
+      this.logger.error("Failed to delete result from KV", {
+        key,
+        error: error instanceof Error ? error.message : String(error),
+        workerId: this.workerId,
+        taskId: task.definition.id,
+      });
+    }
+  }
+
+  /**
    * Handle a single async (JetStream) message.
    *
    * Flow:
@@ -928,6 +959,11 @@ export class NatqWorker {
           workerId: this.workerId,
         });
         msg.ack();
+
+        // Delete result if fire-and-forget mode
+        if (input.dropResultOnSuccess) {
+          await this.deleteResultFromKv(task, kvKey);
+        }
 
       } else if (output.status < 500) {
         // Client error - update KV and TERM

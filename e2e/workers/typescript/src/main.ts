@@ -96,6 +96,17 @@ const asyncClientErrorHandler: TaskHandler = async (input, context) => {
   };
 };
 
+// e2e-drop-result: Test fire-and-forget with dropResultOnSuccess
+const dropResultHandler: TaskHandler = async (input, context) => {
+  await new Promise((resolve) => setTimeout(resolve, 500)); // Simulate work
+  return {
+    id: context.runId,
+    taskId: context.task.id,
+    status: 200,
+    data: { dropped: true },
+  };
+};
+
 async function main() {
   console.log("Starting natq E2E worker (TypeScript)...");
 
@@ -110,6 +121,7 @@ async function main() {
   worker.registerTask("e2e-delay", TaskType.ASYNC, delayHandler);
   worker.registerTask("e2e-retry", TaskType.ASYNC, retryHandler);
   worker.registerTask("e2e-async-client-error", TaskType.ASYNC, asyncClientErrorHandler);
+  worker.registerTask("e2e-drop-result", TaskType.ASYNC, dropResultHandler);
 
   await worker.start({ servers: "localhost:4222" });
 

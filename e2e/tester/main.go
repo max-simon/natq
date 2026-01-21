@@ -69,6 +69,7 @@ func main() {
 	results = append(results, testAsyncDelay(js, kv))
 	results = append(results, testAsyncRetry(js, kv))
 	results = append(results, testAsyncClientError(js, kv))
+	results = append(results, testAsyncDropResult(js, kv))
 
 	// Print results
 	fmt.Println()
@@ -368,6 +369,67 @@ func testAsyncClientError(js nats.JetStreamContext, kv nats.KeyValue) TestResult
 
 	if output.Error != "Async client error" {
 		return TestResult{Name: name, Passed: false, Message: fmt.Sprintf("Expected error 'Async client error', got '%s'", output.Error)}
+	}
+
+	return TestResult{Name: name, Passed: true}
+}
+
+// testAsyncDropResult tests the e2e-drop-result async task with dropResultOnSuccess
+func testAsyncDropResult(js nats.JetStreamContext, kv nats.KeyValue) TestResult {
+	name := "Async: Drop Result on Success (e2e-drop-result)"
+
+	runID := fmt.Sprintf("drop-test-%d", time.Now().UnixNano())
+	kvKey := fmt.Sprintf("e2e-drop-result.%s", runID)
+
+	input := map[string]interface{}{
+		"runId":               runID,
+		"dropResultOnSuccess": true,
+	}
+	inputBytes, _ := json.Marshal(input)
+
+	// Publish to JetStream
+	_, err := js.Publish("natq.job.e2e-drop-result", inputBytes)
+	if err != nil {
+		return TestResult{Name: name, Passed: false, Message: fmt.Sprintf("Failed to publish: %v", err)}
+	}
+
+	// Poll for result - we should see status 200 briefly, then key should be deleted
+	var sawProcessing bool
+	var sawDeleted bool
+
+	deadline := time.Now().Add(kvPollTimeout)
+	for time.Now().Before(deadline) {
+		entry, err := kv.Get(kvKey)
+		if err != nil {
+			// Key not found - could be deleted or not yet created
+			if sawProcessing {
+				// We saw success before, now it's gone - that's the expected behavior
+				sawDeleted = true
+				break
+			}
+			time.Sleep(kvPollInterval)
+			continue
+		}
+
+		var output TaskRunOutput
+		if err := json.Unmarshal(entry.Value(), &output); err != nil {
+			return TestResult{Name: name, Passed: false, Message: fmt.Sprintf("Failed to parse KV entry: %v", err)}
+		}
+
+		if output.Status == 100 {
+			sawProcessing = true
+			// Continue polling to see if it gets deleted
+		}
+
+		time.Sleep(kvPollInterval)
+	}
+
+	if !sawProcessing {
+		return TestResult{Name: name, Passed: false, Message: "Never saw status 100 (processing)"}
+	}
+
+	if !sawDeleted {
+		return TestResult{Name: name, Passed: false, Message: "Result was not deleted from KV after success"}
 	}
 
 	return TestResult{Name: name, Passed: true}

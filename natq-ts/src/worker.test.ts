@@ -681,5 +681,141 @@ describe("NatqWorker", () => {
       expect(mockResultsKv.put).not.toHaveBeenCalled();
       expect(mockMsg.term).toHaveBeenCalledWith("Invalid JSON input");
     });
+
+    it("should delete result from KV when dropResultOnSuccess is true", async () => {
+      const mockLogger = createMockLogger();
+      const worker = new NatqWorker({ heartbeatIntervalMs: 100000 }, mockLogger);
+
+      const kvPutCalls: { key: string; data: any }[] = [];
+      const kvDeleteCalls: string[] = [];
+      const mockPut = jest.fn<(key: string, data: Uint8Array) => Promise<number>>();
+      mockPut.mockImplementation(async (key: string, data: Uint8Array) => {
+        kvPutCalls.push({ key, data: jc.decode(data) });
+        return 1;
+      });
+      const mockDelete = jest.fn<(key: string) => Promise<void>>();
+      mockDelete.mockImplementation(async (key: string) => {
+        kvDeleteCalls.push(key);
+      });
+      const mockResultsKv = { put: mockPut, delete: mockDelete };
+      (worker as any).resultsKv = mockResultsKv;
+
+      const handler: TaskHandler = async (input, context) => ({
+        id: context.runId,
+        taskId: context.task.id,
+        status: 200,
+        data: { result: "success" },
+      });
+
+      worker.registerTask("async-task", TaskType.ASYNC, handler);
+      const task = worker.registry["async-task"];
+
+      const mockMsg = {
+        data: jc.encode({ runId: "drop-run-1", dropResultOnSuccess: true }),
+        ack: jest.fn(),
+        nak: jest.fn(),
+        term: jest.fn(),
+        working: jest.fn(),
+        info: { deliveryCount: 1 },
+      };
+
+      await (worker as any).handleAsyncMessage(task, mockMsg);
+
+      // Should have two KV puts: PROCESSING (100) then final status (200)
+      expect(kvPutCalls.length).toBe(2);
+      expect(kvPutCalls[0].data.status).toBe(100);
+      expect(kvPutCalls[1].data.status).toBe(200);
+
+      // Should have deleted the result after ack
+      expect(kvDeleteCalls.length).toBe(1);
+      expect(kvDeleteCalls[0]).toBe("async-task.drop-run-1");
+
+      expect(mockMsg.ack).toHaveBeenCalled();
+    });
+
+    it("should NOT delete result from KV when dropResultOnSuccess is false or undefined", async () => {
+      const mockLogger = createMockLogger();
+      const worker = new NatqWorker({ heartbeatIntervalMs: 100000 }, mockLogger);
+
+      const mockDelete = jest.fn<(key: string) => Promise<void>>();
+      const mockResultsKv = {
+        put: jest.fn<() => Promise<number>>().mockResolvedValue(1),
+        delete: mockDelete,
+      };
+      (worker as any).resultsKv = mockResultsKv;
+
+      const handler: TaskHandler = async (input, context) => ({
+        id: context.runId,
+        taskId: context.task.id,
+        status: 200,
+        data: { result: "success" },
+      });
+
+      worker.registerTask("async-task", TaskType.ASYNC, handler);
+      const task = worker.registry["async-task"];
+
+      // Test with dropResultOnSuccess: false
+      const mockMsg1 = {
+        data: jc.encode({ runId: "keep-run-1", dropResultOnSuccess: false }),
+        ack: jest.fn(),
+        nak: jest.fn(),
+        term: jest.fn(),
+        working: jest.fn(),
+        info: { deliveryCount: 1 },
+      };
+
+      await (worker as any).handleAsyncMessage(task, mockMsg1);
+      expect(mockDelete).not.toHaveBeenCalled();
+
+      // Test with dropResultOnSuccess undefined
+      const mockMsg2 = {
+        data: jc.encode({ runId: "keep-run-2" }),
+        ack: jest.fn(),
+        nak: jest.fn(),
+        term: jest.fn(),
+        working: jest.fn(),
+        info: { deliveryCount: 1 },
+      };
+
+      await (worker as any).handleAsyncMessage(task, mockMsg2);
+      expect(mockDelete).not.toHaveBeenCalled();
+    });
+
+    it("should NOT delete result from KV on client error even with dropResultOnSuccess", async () => {
+      const mockLogger = createMockLogger();
+      const worker = new NatqWorker({ heartbeatIntervalMs: 100000 }, mockLogger);
+
+      const mockDelete = jest.fn<(key: string) => Promise<void>>();
+      const mockResultsKv = {
+        put: jest.fn<() => Promise<number>>().mockResolvedValue(1),
+        delete: mockDelete,
+      };
+      (worker as any).resultsKv = mockResultsKv;
+
+      const handler: TaskHandler = async (input, context) => ({
+        id: context.runId,
+        taskId: context.task.id,
+        status: 400,
+        error: "Client error",
+      });
+
+      worker.registerTask("async-task", TaskType.ASYNC, handler);
+      const task = worker.registry["async-task"];
+
+      const mockMsg = {
+        data: jc.encode({ runId: "error-run", dropResultOnSuccess: true }),
+        ack: jest.fn(),
+        nak: jest.fn(),
+        term: jest.fn(),
+        working: jest.fn(),
+        info: { deliveryCount: 1 },
+      };
+
+      await (worker as any).handleAsyncMessage(task, mockMsg);
+
+      // Should NOT delete on client error (only on success)
+      expect(mockDelete).not.toHaveBeenCalled();
+      expect(mockMsg.term).toHaveBeenCalled();
+    });
   });
 });
