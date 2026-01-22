@@ -107,9 +107,6 @@ class TaskDefinition:
     type: TaskType
     """How this task is executed: sync (request/reply) or async (job queue)"""
 
-    subject: str
-    """NATS subject where this task receives messages"""
-
     input_schema: str | None = None
     """Optional JSON Schema describing expected input structure"""
 
@@ -121,7 +118,6 @@ class TaskDefinition:
         result: dict[str, Any] = {
             "id": self.id,
             "type": self.type.value,
-            "subject": self.subject,
         }
         if self.input_schema is not None:
             result["inputSchema"] = self.input_schema
@@ -271,9 +267,11 @@ Example:
 
 @dataclass
 class RegisteredTask:
-    """Internal structure holding a task's definition and handler function."""
+    """Internal structure holding a task's definition, subject, and handler function."""
 
     definition: TaskDefinition
+    subject: str
+    """NATS subject where this task receives messages (computed from task type and id)"""
     handler: TaskHandler
 
 
@@ -351,7 +349,6 @@ class NatqWorker:
         task_type: TaskType,
         handler: TaskHandler,
         *,
-        subject: str | None = None,
         input_schema: str | None = None,
         output_schema: str | None = None,
     ) -> None:
@@ -364,7 +361,6 @@ class NatqWorker:
             task_id: Unique task identifier
             task_type: TaskType.SYNC for request/reply, TaskType.ASYNC for job queue
             handler: Async function that processes the task
-            subject: Optional custom subject (default: computed from prefix + id)
             input_schema: Optional JSON Schema for input validation
             output_schema: Optional JSON Schema for output validation
 
@@ -377,21 +373,21 @@ class NatqWorker:
         if self._is_running:
             raise RuntimeError("Cannot register tasks after worker has started")
 
-        if subject is None:
-            if task_type == TaskType.SYNC:
-                subject = f"{self.options.sync_subject_prefix}{task_id}"
-            else:
-                subject = f"{self.options.async_subject_prefix}{task_id}"
+        if task_type == TaskType.SYNC:
+            subject = f"{self.options.sync_subject_prefix}{task_id}"
+        else:
+            subject = f"{self.options.async_subject_prefix}{task_id}"
 
         definition = TaskDefinition(
             id=task_id,
             type=task_type,
-            subject=subject,
             input_schema=input_schema,
             output_schema=output_schema,
         )
 
-        self.registry[task_id] = RegisteredTask(definition=definition, handler=handler)
+        self.registry[task_id] = RegisteredTask(
+            definition=definition, subject=subject, handler=handler
+        )
 
         self.logger.info(
             f"Registered task: {task_id}",
@@ -741,12 +737,12 @@ class NatqWorker:
         for task in sync_tasks:
             handler = self._create_sync_handler(task)
             sub = await self._connection.subscribe(
-                task.definition.subject,
+                task.subject,
                 cb=handler,
             )
             self._sync_subscriptions.append(sub)
             self.logger.debug(
-                f'Listening on subject "{task.definition.subject}"',
+                f'Listening on subject "{task.subject}"',
                 workerId=self.worker_id,
                 taskId=task.definition.id,
             )
@@ -826,7 +822,7 @@ class NatqWorker:
                     self.options.stream_name,
                     config=ConsumerConfig(
                         durable_name=consumer_name,
-                        filter_subject=task.definition.subject,
+                        filter_subject=task.subject,
                         ack_policy=AckPolicy.EXPLICIT,
                         deliver_policy=DeliverPolicy.ALL,
                     ),
@@ -844,7 +840,7 @@ class NatqWorker:
             self._async_tasks.append(processing_task)
 
             self.logger.info(
-                f"Consuming from subject: {task.definition.subject}",
+                f"Consuming from subject: {task.subject}",
                 workerId=self.worker_id,
                 taskId=task.definition.id,
             )
@@ -861,7 +857,7 @@ class NatqWorker:
 
         try:
             sub = await self._js.pull_subscribe(
-                task.definition.subject,
+                task.subject,
                 durable=consumer_name,
                 stream=self.options.stream_name,
             )

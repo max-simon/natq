@@ -103,9 +103,6 @@ export interface TaskDefinition {
   /** How this task is executed: sync (request/reply) or async (job queue) */
   type: TaskType;
 
-  /** NATS subject where this task receives messages */
-  subject: string;
-
   /** Optional JSON Schema describing expected input structure */
   inputSchema?: string;
 
@@ -234,10 +231,12 @@ export type TaskHandler = (
 ) => Promise<TaskRunOutput>;
 
 /**
- * Internal structure holding a task's definition and handler function.
+ * Internal structure holding a task's definition, subject, and handler function.
  */
 export interface RegisteredTask {
   definition: TaskDefinition;
+  /** NATS subject where this task receives messages (computed from task type and id) */
+  subject: string;
   handler: TaskHandler;
 }
 
@@ -326,7 +325,7 @@ export class NatqWorker {
    * @param id - Unique task identifier
    * @param type - `TaskType.SYNC` for request/reply, `TaskType.ASYNC` for job queue
    * @param handler - Async function that processes the task
-   * @param options - Optional: custom subject, input/output schemas
+   * @param options - Optional: input/output schemas
    *
    * @throws Error if called after worker has started
    *
@@ -343,13 +342,13 @@ export class NatqWorker {
     id: string,
     type: TaskType,
     handler: TaskHandler,
-    options?: Partial<TaskDefinition>
+    options?: Pick<TaskDefinition, "inputSchema" | "outputSchema">
   ): void {
     if (this.isRunning) {
       throw new Error("Cannot register tasks after worker has started");
     }
 
-    const defaultSubject =
+    const subject =
       type === "sync"
         ? `${this.options.syncSubjectPrefix}${id}`
         : `${this.options.asyncSubjectPrefix}${id}`;
@@ -357,14 +356,13 @@ export class NatqWorker {
     const definition: TaskDefinition = {
       id,
       type,
-      subject: options?.subject || defaultSubject,
       inputSchema: options?.inputSchema,
       outputSchema: options?.outputSchema,
     };
 
-    this.registry[id] = { definition, handler };
+    this.registry[id] = { definition, subject, handler };
 
-    this.logger.info(`Registered task: ${id}`, { type, subject: definition.subject, workerId: this.workerId });
+    this.logger.info(`Registered task: ${id}`, { type, subject, workerId: this.workerId });
   }
 
   /**
@@ -671,7 +669,7 @@ export class NatqWorker {
     }
 
     for (const task of syncTasks) {
-      const sub = this.connection.subscribe(task.definition.subject, {
+      const sub = this.connection.subscribe(task.subject, {
         callback: (err, msg) => {
           if (err) {
             this.logger.error("Subscription error", { error: String(err), workerId: this.workerId, taskId: task.definition.id });
@@ -685,7 +683,7 @@ export class NatqWorker {
       });
 
       this.syncSubscriptions.push(sub);
-      this.logger.debug(`Listening on subject "${task.definition.subject}"`, { workerId: this.workerId, taskId: task.definition.id });
+      this.logger.debug(`Listening on subject "${task.subject}"`, { workerId: this.workerId, taskId: task.definition.id });
     }
   }
 
@@ -754,7 +752,7 @@ export class NatqWorker {
       } catch {
         await this.jsm.consumers.add(this.options.streamName, {
           durable_name: consumerName,
-          filter_subject: task.definition.subject,
+          filter_subject: task.subject,
           ack_policy: AckPolicy.Explicit,
           deliver_policy: DeliverPolicy.All,
         });
@@ -776,7 +774,7 @@ export class NatqWorker {
       });
       this.asyncPromises.push(processingPromise);
 
-      this.logger.info(`Consuming from subject: ${task.definition.subject}`, { workerId: this.workerId, taskId: task.definition.id });
+      this.logger.info(`Consuming from subject: ${task.subject}`, { workerId: this.workerId, taskId: task.definition.id });
     }
   }
 

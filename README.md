@@ -61,11 +61,14 @@ Stored in NATS KV bucket `natq_tasks` with the task ID as key.
 interface TaskDefinition {
   id: string;                        // Unique task identifier
   type: "sync" | "async";            // Execution model
-  subject: string;                   // NATS subject for triggering
   inputSchema?: string;              // Optional JSON Schema for input validation/discovery
   outputSchema?: string;             // Optional JSON Schema for output validation/discovery
 }
 ```
+
+The NATS subject for triggering tasks is computed from the task type and id:
+- Sync tasks: `natq.req.<task_id>`
+- Async tasks: `natq.job.<task_id>`
 
 ### TaskRunOutput
 

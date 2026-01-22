@@ -35,7 +35,7 @@ describe("NatqWorker", () => {
       expect(worker.registry["my-task"]).toBeDefined();
       expect(worker.registry["my-task"].definition.id).toBe("my-task");
       expect(worker.registry["my-task"].definition.type).toBe(TaskType.SYNC);
-      expect(worker.registry["my-task"].definition.subject).toBe("natq.req.my-task");
+      expect(worker.registry["my-task"].subject).toBe("natq.req.my-task");
     });
 
     it("should register an async task with default subject", () => {
@@ -49,23 +49,7 @@ describe("NatqWorker", () => {
 
       worker.registerTask("my-job", TaskType.ASYNC, handler);
 
-      expect(worker.registry["my-job"].definition.subject).toBe("natq.job.my-job");
-    });
-
-    it("should register a task with custom subject", () => {
-      const mockLogger = createMockLogger();
-      const worker = new NatqWorker({}, mockLogger);
-      const handler: TaskHandler = async () => ({
-        id: "test",
-        taskId: "custom",
-        status: 200,
-      });
-
-      worker.registerTask("custom", TaskType.SYNC, handler, {
-        subject: "custom.subject",
-      });
-
-      expect(worker.registry["custom"].definition.subject).toBe("custom.subject");
+      expect(worker.registry["my-job"].subject).toBe("natq.job.my-job");
     });
 
     it("should register a task with schemas", () => {

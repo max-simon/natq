@@ -134,14 +134,12 @@ class TestTaskDefinition:
         definition = TaskDefinition(
             id="my-task",
             type=TaskType.SYNC,
-            subject="natq.req.my-task",
         )
         result = definition.to_dict()
 
         assert result == {
             "id": "my-task",
             "type": "sync",
-            "subject": "natq.req.my-task",
         }
 
     def test_to_dict_with_schemas(self) -> None:
@@ -149,7 +147,6 @@ class TestTaskDefinition:
         definition = TaskDefinition(
             id="my-task",
             type=TaskType.ASYNC,
-            subject="natq.job.my-task",
             input_schema='{"type": "object"}',
             output_schema='{"type": "string"}',
         )
@@ -158,7 +155,6 @@ class TestTaskDefinition:
         assert result == {
             "id": "my-task",
             "type": "async",
-            "subject": "natq.job.my-task",
             "inputSchema": '{"type": "object"}',
             "outputSchema": '{"type": "string"}',
         }
@@ -180,7 +176,7 @@ class TestNatqWorkerRegisterTask:
         assert "my-task" in worker.registry
         assert worker.registry["my-task"].definition.id == "my-task"
         assert worker.registry["my-task"].definition.type == TaskType.SYNC
-        assert worker.registry["my-task"].definition.subject == "natq.req.my-task"
+        assert worker.registry["my-task"].subject == "natq.req.my-task"
 
     def test_register_async_task_with_default_subject(self) -> None:
         """Should register an async task with computed subject."""
@@ -192,19 +188,7 @@ class TestNatqWorkerRegisterTask:
 
         worker.register_task("my-job", TaskType.ASYNC, handler)
 
-        assert worker.registry["my-job"].definition.subject == "natq.job.my-job"
-
-    def test_register_task_with_custom_subject(self) -> None:
-        """Should allow custom subject override."""
-        logger = create_mock_logger()
-        worker = NatqWorker(logger=logger)
-
-        async def handler(input: TaskRunInput, ctx: TaskContext) -> TaskRunOutput:
-            return TaskRunOutput(id="test", task_id="custom", status=200)
-
-        worker.register_task("custom", TaskType.SYNC, handler, subject="custom.subject")
-
-        assert worker.registry["custom"].definition.subject == "custom.subject"
+        assert worker.registry["my-job"].subject == "natq.job.my-job"
 
     def test_register_task_with_schemas(self) -> None:
         """Should store schemas when provided."""

@@ -79,12 +79,15 @@ worker.registerTask(
   TaskType.SYNC,       // Task type: SYNC or ASYNC
   handler,             // Task handler function
   {                    // Optional configuration
-    subject: "custom.subject",  // Override default subject
     inputSchema: "...",         // JSON Schema for input
     outputSchema: "...",        // JSON Schema for output
   }
 );
 ```
+
+The NATS subject is computed automatically from the task type and id:
+- Sync tasks: `natq.req.<task_id>`
+- Async tasks: `natq.job.<task_id>`
 
 ##### `start(connectionOptions)`
 

@@ -80,11 +80,12 @@ All messages use **JSON encoding**. Response metadata is in NATS headers.
 {
   "id": "send-email",
   "type": "sync",
-  "subject": "natq.req.send-email",
   "inputSchema": "{ \"type\": \"object\", ... }",
   "outputSchema": "{ \"type\": \"object\", ... }"
 }
 ```
+
+Note: The NATS subject is computed from the task type and id (e.g., `natq.req.send-email` for sync, `natq.job.send-email` for async) and is not stored in the TaskDefinition.
 
 ## Status Codes & Async Acknowledgment
 
@@ -152,7 +153,7 @@ CREATED ──▶ registerTask() ──▶ CONFIGURED ──▶ start() ──�
 
 2. **Types/Interfaces**:
    - `TaskType` enum: `SYNC`, `ASYNC`
-   - `TaskDefinition`: id, type, subject, inputSchema?, outputSchema?
+   - `TaskDefinition`: id, type, inputSchema?, outputSchema?
    - `TaskContext`: runId, task, workerId
    - `TaskRunInput`: JSON object with optional runId, dropResultOnSuccess
    - `TaskRunOutput`: id, taskId, status, data?, error?
